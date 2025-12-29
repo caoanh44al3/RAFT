@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+/*
+ * Service Raft:
+ * - RequestVote: bầu leader
+ * - AppendEntries: heartbeat + replicate log
+ * - Client RPC: GetLeader, Set, Get
+ */
+service Raft {
+  // ===== RAFT CORE =====
+  rpc RequestVote (RequestVoteRequest) returns (RequestVoteResponse);
+  rpc AppendEntries (AppendEntriesRequest) returns (AppendEntriesResponse);
+
+  // ===== CLIENT API =====
+  rpc GetLeader (Empty) returns (LeaderResponse);
+  rpc ClientSet (ClientSetRequest) returns (ClientSetResponse);
+  rpc ClientGet (ClientGetRequest) returns (ClientGetResponse);
+}
+
+/* ===== COMMON ===== */
+message Empty {}
+
+/* ===== LEADER INFO ===== */
+message LeaderResponse {
+  bool is_leader = 1;
+  string leader_id = 2;
+}
+
+/* ===== RequestVote ===== */
+message RequestVoteRequest {
+  int32 term = 1;
+  string candidate_id = 2;
+  int32 last_log_index = 3;
+  int32 last_log_term = 4;
+}
+
+message RequestVoteResponse {
+  int32 term = 1;
+  bool vote_granted = 2;
+}
+
+/* ===== AppendEntries ===== */
+message LogEntry {
+  int32 term = 1;
+  string key = 2;
+  string value = 3;
+}
+
+message AppendEntriesRequest {
+  int32 term = 1;
+  string leader_id = 2;
+  int32 prev_log_index = 3;
+  int32 prev_log_term = 4;
+  repeated LogEntry entries = 5;   // rỗng = heartbeat
+  int32 leader_commit = 6;
+}
+
+message AppendEntriesResponse {
+  int32 term = 1;
+  bool success = 2;
+}
+
+/* ===== CLIENT SET ===== */
+message ClientSetRequest {
+  string key = 1;
+  string value = 2;
+}
+
+message ClientSetResponse {
+  bool success = 1;
+}
+
+/* ===== CLIENT GET ===== */
+message ClientGetRequest {
+  string key = 1;
+}
+
+message ClientGetResponse {
+  bool found = 1;
+  string value = 2;
+}
