@@ -48,9 +48,21 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
         self.lock = threading.Lock()
 
         self.start_time = time.time() 
+        
+        # ===== Fault Simulation =====
+        self.blocked_peers = set() # Set of "host:port" to block
 
         # Start election timeout thread
         threading.Thread(target=self.election_loop, daemon=True).start()
+
+    # =====================================================
+    # =============== FAULT SIMULATION ====================
+    # =====================================================
+    def SetPartition(self, request, context):
+        with self.lock:
+            self.blocked_peers = set(request.blocked_addresses)
+            print(f"[{self.node_id}] Partition set. Blocking: {self.blocked_peers}")
+        return raft_pb2.PartitionResponse(success=True)
 
     # =====================================================
     # =============== ELECTION & HEARTBEAT ================
@@ -84,6 +96,8 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
 
             # Gửi RequestVote tới các peer
             for peer_id, addr in self.peers.items():
+                if addr in self.blocked_peers:
+                    continue
                 try:
                     channel = grpc.insecure_channel(addr)
                     stub = raft_pb2_grpc.RaftStub(channel)
@@ -137,6 +151,8 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
             print(f"[{self.node_id}] HEARTBEAT #{self.heartbeat_count}")
 
             for peer_id, addr in self.peers.items():
+                if addr in self.blocked_peers:
+                    continue
                 self.send_append_entries(peer_id, addr)
 
             time.sleep(1)
@@ -186,6 +202,14 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
         Follower nhận heartbeat hoặc log từ leader
         """
         with self.lock:
+            # Check partition
+            if request.leader_id in self.peers:
+                addr = self.peers[request.leader_id]
+                if addr in self.blocked_peers:
+                    return raft_pb2.AppendEntriesResponse(
+                        term=self.current_term, success=False
+                    )
+
             if request.term < self.current_term:
                 return raft_pb2.AppendEntriesResponse(
                     term=self.current_term, success=False
@@ -240,6 +264,14 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
         Xử lý RequestVote từ candidate
         """
         with self.lock:
+            # Check partition
+            if request.candidate_id in self.peers:
+                addr = self.peers[request.candidate_id]
+                if addr in self.blocked_peers:
+                    return raft_pb2.RequestVoteResponse(
+                        term=self.current_term, vote_granted=False
+                    )
+
             if request.term < self.current_term:
                 return raft_pb2.RequestVoteResponse(
                     term=self.current_term, vote_granted=False

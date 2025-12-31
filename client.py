@@ -68,6 +68,17 @@ def get_value(key):
     else:
         print(f"[CLIENT] GET {key} not found")
 
+# ===== Hàm thiết lập partition (block peer) =====
+def set_partition(target_addr, blocked_list):
+    stub = get_stub(target_addr)
+    try:
+        resp = stub.SetPartition(
+            raft_pb2.PartitionRequest(blocked_addresses=blocked_list)
+        )
+        print(f"[CLIENT] Partition set on {target_addr}. Blocked: {blocked_list}")
+    except Exception as e:
+        print(f"[CLIENT] Error setting partition on {target_addr}: {e}")
+
 # ===== In hướng dẫn sử dụng CLI =====
 def print_help():
     print("""
@@ -75,6 +86,11 @@ Commands:
   getleader          # Tìm leader hiện tại
   set <key> <value>  # Ghi giá trị key=value
   get <key>          # Đọc giá trị key
+  partition <target_port> <blocked_ports...> 
+                     # Block các port trên node target. 
+                     # VD: partition 5001 5002 5003 (Node 5001 sẽ block 5002 và 5003)
+  clear_partition <target_port>
+                     # Xóa partition trên node target
   exit               # Thoát client
 """)
 
@@ -110,6 +126,29 @@ if __name__ == "__main__":
                 print("Usage: get <key>")
                 continue
             get_value(cmd[1])  # gửi lệnh get
+
+        elif cmd[0] == "partition":
+            if len(cmd) < 3:
+                print("Usage: partition <target_port> <blocked_port1> [blocked_port2 ...]")
+                continue
+            
+            target_port = cmd[1]
+            blocked_ports = cmd[2:]
+            
+            # Convert ports to full addresses
+            target_addr = f"localhost:{target_port}"
+            blocked_addrs = [f"localhost:{p}" for p in blocked_ports]
+            
+            set_partition(target_addr, blocked_addrs)
+
+        elif cmd[0] == "clear_partition":
+            if len(cmd) != 2:
+                print("Usage: clear_partition <target_port>")
+                continue
+            
+            target_port = cmd[1]
+            target_addr = f"localhost:{target_port}"
+            set_partition(target_addr, [])
 
         else:
             print("Unknown command")
