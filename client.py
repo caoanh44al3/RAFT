@@ -21,16 +21,29 @@ def get_stub(addr):
 # Client thử gọi ClientGet với key "__ping__"
 # Node nào trả lời thành công → leader
 def find_leader():
+    # First, try GetLeader RPC which explicitly returns whether the node is leader
+    node_map = {
+        "node1": "localhost:5001",
+        "node2": "localhost:5002",
+        "node3": "localhost:5003",
+        "node4": "localhost:5004",
+        "node5": "localhost:5005",
+    }
+
     for addr in ADDRESSES:
         try:
             stub = get_stub(addr)
-            stub.ClientGet(
-                raft_pb2.ClientGetRequest(key="__ping__"),
-                timeout=1
-            )
-            print(f"[CLIENT] Leader found at {addr}")
-            return addr
-        except:
+            resp = stub.GetLeader(raft_pb2.Empty(), timeout=1)
+            if resp.is_leader:
+                print(f"[CLIENT] Leader found at {addr}")
+                return addr
+            # If the node knows who the leader is, resolve and return that address
+            if resp.leader_id:
+                leader_addr = node_map.get(resp.leader_id)
+                if leader_addr:
+                    print(f"[CLIENT] Leader reported by {addr}: {resp.leader_id} -> {leader_addr}")
+                    return leader_addr
+        except Exception:
             continue
 
     print("[CLIENT] No leader found")

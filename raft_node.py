@@ -82,11 +82,12 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
                 if self.state == LEADER:
                     continue
 
-                timeout = random.uniform(3, 5)
+                timeout = random.uniform(5, 10)
                 if time.time() - self.last_heartbeat < timeout:
                     continue
 
                 # Timeout → start election
+                print(f"[{self.node_id}] Election timeout after {timeout:.2f}s, starting election")
                 self.state = CANDIDATE
                 self.current_term += 1
                 self.voted_for = self.node_id
@@ -116,7 +117,13 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
                     )
 
                     with self.lock:
-                        if resp.vote_granted:
+                        # If peer reports a higher term, step down
+                        if resp.term > self.current_term:
+                            print(f"[{self.node_id}] Seen higher term {resp.term} from {peer_id}, stepping down")
+                            self.current_term = resp.term
+                            self.state = FOLLOWER
+                            self.voted_for = None
+                        elif resp.vote_granted:
                             votes += 1
 
                 except:
@@ -125,6 +132,8 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
             with self.lock:
                 if votes > (len(self.peers) + 1) // 2:
                     self.become_leader()
+                else:
+                    print(f"[{self.node_id}] Election failed: got {votes} votes, need >{(len(self.peers) + 1) // 2}")
 
     def become_leader(self):
         """
@@ -271,8 +280,15 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
                     return raft_pb2.RequestVoteResponse(
                         term=self.current_term, vote_granted=False
                     )
+            # If the request has a higher term, update our term and reset previous vote
+            if request.term > self.current_term:
+                print(f"[{self.node_id}] RequestVote with higher term {request.term} (was {self.current_term}); updating term and clearing vote")
+                self.current_term = request.term
+                self.voted_for = None
+                self.state = FOLLOWER
 
             if request.term < self.current_term:
+                print(f"[{self.node_id}] Deny vote to {request.candidate_id}: term {request.term} < {self.current_term}")
                 return raft_pb2.RequestVoteResponse(
                     term=self.current_term, vote_granted=False
                 )
@@ -282,11 +298,13 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
                 or self.voted_for == request.candidate_id
             ):
                 self.voted_for = request.candidate_id
-                self.current_term = request.term
+                # current_term already updated above when necessary
+                print(f"[{self.node_id}] Grant vote to {request.candidate_id} (term {request.term})")
                 return raft_pb2.RequestVoteResponse(
                     term=self.current_term, vote_granted=True
                 )
 
+            print(f"[{self.node_id}] Deny vote to {request.candidate_id}: already voted for {self.voted_for}")
             return raft_pb2.RequestVoteResponse(
                 term=self.current_term, vote_granted=False
             )
