@@ -360,6 +360,11 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
         """
         Client GET từ state machine
         """
+        if self.state != LEADER:
+            context.abort(
+                grpc.StatusCode.FAILED_PRECONDITION,
+                "Not leader"
+            )
         if request.key in self.kv_store:
             return raft_pb2.ClientGetResponse(
                 found=True, value=self.kv_store[request.key]

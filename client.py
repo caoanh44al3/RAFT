@@ -1,16 +1,18 @@
 import grpc
 import raft_pb2
 import raft_pb2_grpc
+import argparse
 
-# ===== Danh sách địa chỉ của 5 node trong cluster =====
-# Client sẽ chỉ cần gọi đến địa chỉ, không cần biết node_id
-ADDRESSES = [
-    "localhost:5001",
-    "localhost:5002",
-    "localhost:5003",
-    "localhost:5004",
-    "localhost:5005",
-]
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--nodes",
+    nargs="+",
+    required=True,
+    help="List of node addresses, e.g. localhost:5001 localhost:5002"
+)
+args = parser.parse_args()
+
+ADDRESSES = args.nodes
 
 # ===== Hàm tiện ích: tạo stub để gọi RPC =====
 def get_stub(addr):
@@ -24,12 +26,14 @@ def find_leader():
     for addr in ADDRESSES:
         try:
             stub = get_stub(addr)
-            stub.ClientGet(
-                raft_pb2.ClientGetRequest(key="__ping__"),
+            resp = stub.GetLeader(
+                raft_pb2.Empty(),
                 timeout=1
             )
-            print(f"[CLIENT] Leader found at {addr}")
-            return addr
+
+            if resp.is_leader:
+                print(f"[CLIENT] Leader found at {addr}")
+                return addr
         except:
             continue
 
