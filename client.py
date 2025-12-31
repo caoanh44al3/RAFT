@@ -43,7 +43,7 @@ def find_leader():
             if resp.leader_id:
                 leader_addr = node_map.get(resp.leader_id)
                 if leader_addr:
-                    print(f"[CLIENT] Leader reported by {addr}: {resp.leader_id} -> {leader_addr}")
+                    print(f"[CLIENT] Leader found at {leader_addr} || Reported by {addr} ")
                     return leader_addr
         except Exception:
             continue
